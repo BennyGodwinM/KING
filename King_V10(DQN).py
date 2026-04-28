@@ -1314,25 +1314,29 @@ class RealRobotDQNEnv(gym.Env):
 def train_model():
     env = RealRobotDQNEnv(render_mode=True)
 
-    print("Creating new DQN model...")
-    model = DQN(
-        "MlpPolicy",
-        env,
-        device="cpu",
-        verbose=1,
-        learning_rate=1e-4,
-        buffer_size=10000,
-        learning_starts=500,
-        batch_size=64,
-        gamma=0.99,
-        train_freq=2,
-        gradient_steps=1,
-        target_update_interval=500,
-        exploration_fraction=0.4,
-        exploration_initial_eps=0.5,
-        exploration_final_eps=0.1,
-        tensorboard_log="./dqn_tensorboard/"
-    )
+    if os.path.exists(MODEL_PATH + ".zip"):
+        print("Loading existing DQN model...")
+        model = DQN.load(MODEL_PATH, env=env, device="cpu")
+    else:
+        print("Creating new DQN model...")
+        model = DQN(
+            "MlpPolicy",
+            env,
+            device="cpu",
+            verbose=1,
+            learning_rate=1e-4,
+            buffer_size=10000,
+            learning_starts=500,
+            batch_size=64,
+            gamma=0.99,
+            train_freq=2,
+            gradient_steps=1,
+            target_update_interval=500,
+            exploration_fraction=0.4,
+            exploration_initial_eps=0.5,
+            exploration_final_eps=0.1,
+            tensorboard_log="./dqn_tensorboard/"
+        )
 
     try:
         model.learn(
@@ -1365,12 +1369,12 @@ def run_model(model_path=MODEL_PATH, episodes=5):
     finally:
         env.close()
 
-
+# this is a test comment
 if __name__ == "__main__":
     prompt_run_metadata()
     ensure_log_file()
 
-    MODE = "run"   # "train" or "run"
+    MODE = "train"   # "train" or "run"
 
     if MODE == "train":
         train_model()
