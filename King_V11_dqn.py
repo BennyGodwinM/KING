@@ -18,7 +18,7 @@ BAUD_RATE = 9600
 LOWER_HSV = np.array([145, 80, 80])
 UPPER_HSV = np.array([179, 255, 255])
 
-MIN_AREA = 400
+MIN_AREA = 200
 PATCH_RADIUS = 3
 CENTER_DRAW_RADIUS = 6
 
@@ -65,12 +65,12 @@ CONTROL_DT = 0.15
 SUCCESS_REWARD = 10.0
 ANGLE_BONUS_REWARD = 3.0
 COLLISION_PENALTY = -15.0
-DISTANCE_DELTA_GAIN = 3.0
+DISTANCE_DELTA_GAIN = 8.0
 ANGLE_DELTA_GAIN = 0.015
 TIME_PENALTY_GAIN = 0.15
 
 CENTERED_FORWARD_ANGLE_DEG = 7.0
-FORWARD_CLEAR_BONUS = 1.0
+FORWARD_CLEAR_BONUS = 0.15
 PATH_CLEAR_CENTER_DANGER_THRESH = 0.40
 
 MAX_R_DELTA_PER_STEP = 0.10
@@ -89,7 +89,7 @@ SUSPICIOUS_CLOSER_MARGIN = 0.20
 INVALID_DANGER_GAIN = 0.65
 DEPTH_DANGER_GAIN = 0.35
 AVOIDANCE_REWARD_GAIN = 0.35
-FORWARD_DANGER_PENALTY_GAIN = 1.50
+FORWARD_DANGER_PENALTY_GAIN = 0.75
 TURN_TO_CLEAR_CENTER_BONUS_GAIN = 0.15
 STOP_DANGER_PENALTY_GAIN = 0.04
 
@@ -630,6 +630,8 @@ class RealRobotDQNEnv(gym.Env):
         self.stable_R_frames = 0
         self.last_R_filter_reason = ""
 
+        self.prev_action_char = None
+
     def _update_gyro(self):
         self.dt_gyro = 0.0
         self.dpsi_step = 0.0
@@ -907,7 +909,7 @@ class RealRobotDQNEnv(gym.Env):
         side_danger_distance = AVOIDANCE_TRIGGER_DISTANCE * 1.6
 
         left_danger = combined_direction_danger(left_depth, left_invalid_ratio, side_danger_distance)
-        center_danger = combined_direction_danger(center_depth, center_invalid_ratio, AVOIDANCE_TRIGGER_DISTANCE * 1.8)
+        center_danger = combined_direction_danger(center_depth, center_invalid_ratio, AVOIDANCE_TRIGGER_DISTANCE)
         right_danger = combined_direction_danger(right_depth, right_invalid_ratio, side_danger_distance)
 
         target_like_front_object = False
@@ -1109,14 +1111,26 @@ class RealRobotDQNEnv(gym.Env):
             reward_success = SUCCESS_REWARD + ANGLE_BONUS_REWARD
             success = True
         else:
+            # disabled due to it being a dumb idea lol
+            wheel_collision_risk = (
+                    info["left_danger"] > 1.0 or
+                    info["right_danger"] > 1.0
+            )
+
             unsafe_forward = (
-                action_char == "F" and
-                (info["front_state"] == "OBSTACLE" or info["front_state"] == "UNKNOWN")
+                    action_char == "F" and
+                    (
+                            info["front_state"] == "OBSTACLE"
+                            or info["front_state"] == "UNKNOWN"
+                            or wheel_collision_risk
+                    )
             )
 
             if unsafe_forward:
                 reward_collision = COLLISION_PENALTY
                 collision = True
+
+        delta_R = 0.0
 
         if self.prev_R_est is not None:
             delta_R = self.prev_R_est - curr_R_est
@@ -1140,14 +1154,18 @@ class RealRobotDQNEnv(gym.Env):
 
         if AVOIDANCE_ON_UNKNOWN:
             base_avoidance_active = (
-                info["depth_avoidance_active"] or
-                info["front_state"] == "OBSTACLE" or
-                info["front_state"] == "UNKNOWN"
+                    info["depth_avoidance_active"] or
+                    info["front_state"] == "OBSTACLE" or
+                    info["front_state"] == "UNKNOWN" or
+                    info["left_danger"] > 0.35 or
+                    info["right_danger"] > 0.35
             )
         else:
             base_avoidance_active = (
-                info["depth_avoidance_active"] or
-                info["front_state"] == "OBSTACLE"
+                    info["depth_avoidance_active"] or
+                    info["front_state"] == "OBSTACLE" or
+                    info["left_danger"] > 0.35 or
+                    info["right_danger"] > 0.35
             )
 
         avoidance_active = (
@@ -1178,13 +1196,6 @@ class RealRobotDQNEnv(gym.Env):
             reward_forward += 0.10
 
         if (
-                action_char == "F"
-                and not avoidance_active
-                and abs(curr_theta_est_deg) > 8.0
-        ):
-            reward_forward -= 0.15
-
-        if (
                 action_char in ["L", "R"]
                 and not avoidance_active
                 and abs(curr_theta_est_deg) < CENTERED_FORWARD_ANGLE_DEG
@@ -1196,6 +1207,11 @@ class RealRobotDQNEnv(gym.Env):
         right_danger = info["right_danger"]
 
         if avoidance_active:
+            if (
+                    (self.prev_action_char == "L" and action_char == "R") or
+                    (self.prev_action_char == "R" and action_char == "L")
+            ):
+                reward_avoidance -= 0.05
             if action_char == "L":
                 reward_avoidance += AVOIDANCE_REWARD_GAIN * (right_danger - left_danger)
                 reward_avoidance += TURN_TO_CLEAR_CENTER_BONUS_GAIN * center_danger
@@ -1205,10 +1221,17 @@ class RealRobotDQNEnv(gym.Env):
             elif action_char == "F":
                 reward_avoidance -= FORWARD_DANGER_PENALTY_GAIN * center_danger
                 reward_avoidance -= 0.20 * (left_danger + right_danger)
+
+                if delta_R > 0:
+                    reward_avoidance += 0.25
+
             elif action_char == "S":
                 reward_avoidance -= STOP_DANGER_PENALTY_GAIN * (left_danger + center_danger + right_danger)
         else:
             reward_avoidance = 0.0
+
+        if avoidance_active:
+            reward_angle *= 0.2
 
         reward_time = -TIME_PENALTY_GAIN * dt
 
@@ -1323,6 +1346,8 @@ class RealRobotDQNEnv(gym.Env):
                 collision=collision
             )
 
+        self.prev_action_char = action_char
+
         return obs, reward, terminated, truncated, info
 
     def _render(self, info, obs, reward, action_char, done, success, collision):
@@ -1374,12 +1399,16 @@ class RealRobotDQNEnv(gym.Env):
             base_avoidance_active_disp = (
                 info["depth_avoidance_active"] or
                 info["front_state"] == "OBSTACLE" or
-                info["front_state"] == "UNKNOWN"
+                info["front_state"] == "UNKNOWN" or
+                info["left_danger"] > 0.35 or
+                info["right_danger"] > 0.35
             )
         else:
             base_avoidance_active_disp = (
                 info["depth_avoidance_active"] or
-                info["front_state"] == "OBSTACLE"
+                info["front_state"] == "OBSTACLE" or
+                info["left_danger"] > 0.35 or
+                info["right_danger"] > 0.35
             )
 
         avoidance_active_disp = (
@@ -1525,7 +1554,7 @@ def train_model():
             device="cpu",
             verbose=1,
             learning_rate=1e-4,
-            buffer_size=50000,
+            buffer_size=100000,
             learning_starts=100,
             batch_size=64,
             gamma=0.99,
@@ -1533,8 +1562,8 @@ def train_model():
             gradient_steps=1,
             target_update_interval=500,
             exploration_fraction=0.6,
-            exploration_initial_eps=0.9,
-            exploration_final_eps=0.05,
+            exploration_initial_eps=0.6,
+            exploration_final_eps=0.15,
             tensorboard_log="./dqn_tensorboard/"
         )
 
@@ -1551,7 +1580,7 @@ def train_model():
 
 
 def run_model(model_path=MODEL_PATH, episodes=5):
-    env = RealRobotDQNEnv(render_mode=False)
+    env = RealRobotDQNEnv(render_mode=True)
     model = DQN.load(model_path)
 
     try:
