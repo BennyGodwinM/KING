@@ -12,8 +12,8 @@ from stable_baselines3 import DQN
 from stable_baselines3.common.callbacks import BaseCallback
 
 
-SERIAL_PORT = "COM3"
-BAUD_RATE = 9600
+SERIAL_PORT = "/dev/ttyACM0"
+BAUD_RATE = 115200
 
 LOWER_HSV = np.array([145, 80, 80])
 UPPER_HSV = np.array([179, 255, 255])
@@ -480,8 +480,8 @@ def nearest_valid_depth_m(roi):
 
 
 def depth_danger_from_distance(depth_m, danger_distance):
-    if depth_m is None or not np.isfinite(depth_m):
-        return 0.0
+    if depth_m is None or not np.isfinite(depth_m) or depth_m <= 0:
+        return 1.0
     if depth_m >= danger_distance:
         return 0.0
     return float(np.clip((danger_distance - depth_m) / danger_distance, 0.0, 1.0))
@@ -631,6 +631,7 @@ class RealRobotDQNEnv(gym.Env):
         self.last_R_filter_reason = ""
 
         self.prev_action_char = None
+        self.avoidance_timer = 0
 
     def _update_gyro(self):
         self.dt_gyro = 0.0
@@ -1168,11 +1169,19 @@ class RealRobotDQNEnv(gym.Env):
                     info["right_danger"] > 0.35
             )
 
-        avoidance_active = (
-            base_avoidance_active and
-            (not info["target_like_front_object"]) and
-            (not info["disable_avoidance_near_target"])
+        base_avoidance_active = (
+                base_avoidance_active and
+                (not info["target_like_front_object"]) and
+                (not info["disable_avoidance_near_target"])
         )
+
+        if base_avoidance_active:
+            self.avoidance_timer = 10
+
+        avoidance_active = self.avoidance_timer > 0
+
+        if self.avoidance_timer > 0:
+            self.avoidance_timer -= 1
 
         path_clear = (
             info["front_state"] == "SAFE"
@@ -1222,8 +1231,8 @@ class RealRobotDQNEnv(gym.Env):
                 reward_avoidance -= FORWARD_DANGER_PENALTY_GAIN * center_danger
                 reward_avoidance -= 0.20 * (left_danger + right_danger)
 
-                if delta_R > 0:
-                    reward_avoidance += 0.25
+                if delta_R > 0 and center_danger < 0.3:
+                    reward_avoidance += 0.03
 
             elif action_char == "S":
                 reward_avoidance -= STOP_DANGER_PENALTY_GAIN * (left_danger + center_danger + right_danger)
