@@ -95,8 +95,8 @@ STOP_DANGER_PENALTY_GAIN = 0.04
 
 AVOIDANCE_ON_UNKNOWN = True
 
-MODEL_PATH = "dqn_target_nav_model_7"
-LOG_PATH = "dqn_step_log_7.csv"
+MODEL_PATH = "dqn_target_nav_model_8"
+LOG_PATH = "dqn_step_log_8.csv"
 
 last_cmd = None
 
@@ -1164,13 +1164,16 @@ class RealRobotDQNEnv(gym.Env):
 
         if info["target_like_front_object"] or info["disable_avoidance_near_target"]:
             self.avoidance_timer = 0
-        elif base_avoidance_active:
-            self.avoidance_timer = 5
+            avoidance_active = False
 
-        avoidance_active = self.avoidance_timer > 0
+        else:
+            if base_avoidance_active:
+                self.avoidance_timer = 5
 
-        if self.avoidance_timer > 0:
-            self.avoidance_timer -= 1
+            avoidance_active = self.avoidance_timer > 0
+
+            if self.avoidance_timer > 0:
+                self.avoidance_timer -= 1
 
         left_danger = info["left_danger"]
         center_danger = info["center_danger"]
