@@ -5,7 +5,7 @@ from stable_baselines3 import DQN
 
 from King_V14 import RealRobotDQNEnv
 
-MODEL_PATH = "dqn_target_nav_model_8.zip"
+MODEL_PATH = "dqn_target_nav_model_7.zip"
 OUTPUT_FILE = "q_values_log_2.csv"
 
 

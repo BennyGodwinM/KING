@@ -95,8 +95,8 @@ STOP_DANGER_PENALTY_GAIN = 0.04
 
 AVOIDANCE_ON_UNKNOWN = True
 
-MODEL_PATH = "dqn_target_nav_model_8"
-LOG_PATH = "dqn_step_log_8.csv"
+MODEL_PATH = "dqn_target_nav_model_7"
+LOG_PATH = "dqn_step_log_9.csv"
 
 last_cmd = None
 
