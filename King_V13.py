@@ -1162,8 +1162,10 @@ class RealRobotDQNEnv(gym.Env):
                 (not info["disable_avoidance_near_target"])
         )
 
-        if base_avoidance_active:
-            self.avoidance_timer = 10
+        if info["target_like_front_object"] or info["disable_avoidance_near_target"]:
+            self.avoidance_timer = 0
+        elif base_avoidance_active:
+            self.avoidance_timer = 5
 
         avoidance_active = self.avoidance_timer > 0
 
