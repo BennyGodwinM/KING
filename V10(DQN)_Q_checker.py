@@ -3,9 +3,9 @@ import torch
 import csv
 from stable_baselines3 import DQN
 
-from King_V10_dqn import RealRobotDQNEnv
+from King_V13 import RealRobotDQNEnv
 
-MODEL_PATH = "dqn_target_nav_model_6.zip"
+MODEL_PATH = "dqn_target_nav_model_7.zip"
 OUTPUT_FILE = "q_values_log_2.csv"
 
 
