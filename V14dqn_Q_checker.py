@@ -19,7 +19,7 @@ def safe_info(info, key, default=""):
 
 
 def main():
-    env = RealRobotDQNEnv(render_mode=True)
+    env = RealRobotDQNEnv(render_mode=False)
 
     model = DQN.load(MODEL_PATH, env=env, device="cpu")
 
