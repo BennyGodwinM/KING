@@ -40,7 +40,7 @@ MAX_FORWARD_STEP = 0.20
 MAX_TURN_STEP_DEG = 45.0
 
 TARGET_REACHED_DIST_M = 0.35
-SUCCESS_ANGLE_THRESH_DEG = 45.0
+SUCCESS_ANGLE_THRESH_DEG = 20.0
 
 FRONT_OBSTACLE_DISTANCE = 0.30
 AVOIDANCE_TRIGGER_DISTANCE = 0.55
@@ -51,7 +51,7 @@ MAX_OBS_DISTANCE = 10.0
 IGNORE_INVALIDS_NEAR_TARGET_DIST = 0.4
 DISABLE_AVOIDANCE_NEAR_TARGET_DIST = 0.4
 
-TARGET_DEPTH_MATCH_THRESH = 0.10
+TARGET_DEPTH_MATCH_THRESH = 0.25
 TARGET_CENTER_MATCH_DEG = 18.0
 
 ACTION_MEANINGS = {
@@ -1532,7 +1532,7 @@ def train_model():
             verbose=1,
             learning_rate=1e-4,
             buffer_size=100000,
-            learning_starts=100,
+            learning_starts=300,
             batch_size=64,
             gamma=0.99,
             train_freq=2,
