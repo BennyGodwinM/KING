@@ -49,7 +49,7 @@ UNKNOWN_FRAMES_NEEDED = 4
 
 MAX_OBS_DISTANCE = 10.0
 IGNORE_INVALIDS_NEAR_TARGET_DIST = 0.4
-DISABLE_AVOIDANCE_NEAR_TARGET_DIST = 0.4
+DISABLE_AVOIDANCE_NEAR_TARGET_DIST = 0.55
 
 TARGET_DEPTH_MATCH_THRESH = 0.25
 TARGET_CENTER_MATCH_DEG = 18.0
@@ -924,6 +924,23 @@ class RealRobotDQNEnv(gym.Env):
             front_min_depth_m is not None and
             front_min_depth_m < AVOIDANCE_TRIGGER_DISTANCE
         )
+
+        # HARD NEAR-TARGET OVERRIDE:
+        # If the filtered target estimate is close enough, completely disable
+        # every avoidance signal no matter what the depth image says.
+        # This prevents the target itself from being treated like an obstacle.
+        if disable_avoidance_near_target:
+            target_like_front_object = True
+            depth_avoidance_active = False
+            front_state = "SAFE"
+            front_invalid_ratio = 0.0
+            left_invalid_ratio = 0.0
+            center_invalid_ratio = 0.0
+            right_invalid_ratio = 0.0
+            left_danger = 0.0
+            center_danger = 0.0
+            right_danger = 0.0
+            self.unknown_counter = 0
 
         obs = np.array([
             clip_obs_distance(R_est_obs),
