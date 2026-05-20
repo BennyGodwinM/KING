@@ -528,7 +528,8 @@ class RealRobotDQNEnv(gym.Env):
             0.0,
             0.0,
             0.0,
-            -180.0,
+            -1.0,
+            -1.0,
             0.0,
             0.0,
             0.0
@@ -541,7 +542,8 @@ class RealRobotDQNEnv(gym.Env):
             MAX_OBS_DISTANCE,
             1.0,
             1.0,
-            180.0,
+            1.0,
+            1.0,
             1.0,
             1.0,
             1.0
@@ -963,6 +965,8 @@ class RealRobotDQNEnv(gym.Env):
             right_danger = 0.0
             self.unknown_counter = 0
 
+        theta_rad_obs = deg_to_rad(theta_est_deg_obs)
+
         obs = np.array([
             clip_obs_distance(R_est_obs),
             clip_obs_distance(left_depth),
@@ -970,7 +974,8 @@ class RealRobotDQNEnv(gym.Env):
             clip_obs_distance(right_depth),
             clip_ratio(front_invalid_ratio),
             1.0 if target_visible else 0.0,
-            theta_est_deg_obs,
+            math.sin(theta_rad_obs),
+            math.cos(theta_rad_obs),
             clip_ratio(left_invalid_ratio),
             clip_ratio(center_invalid_ratio),
             clip_ratio(right_invalid_ratio)
@@ -1051,7 +1056,7 @@ class RealRobotDQNEnv(gym.Env):
             obs, info = self._get_camera_and_estimate()
 
         self.prev_R_est = float(obs[0])
-        self.prev_theta_est_deg = float(obs[6])
+        self.prev_theta_est_deg = 0.0
 
         self.last_obs = obs
         self.last_info = info
@@ -1123,6 +1128,7 @@ class RealRobotDQNEnv(gym.Env):
                 0.0,
                 1.0,
                 1.0,
+                1.0,
                 1.0
             ], dtype=np.float32)
 
@@ -1132,7 +1138,7 @@ class RealRobotDQNEnv(gym.Env):
             return obs, reward, terminated, truncated, {"camera_fail": True}
 
         curr_R_est = float(obs[0])
-        curr_theta_est_deg = float(obs[6])
+        curr_theta_est_deg = rad_to_deg(math.atan2(obs[6], obs[7]))
 
         reward = 0.0
         success = False
@@ -1189,15 +1195,15 @@ class RealRobotDQNEnv(gym.Env):
                     info["depth_avoidance_active"] or
                     info["front_state"] == "OBSTACLE" or
                     info["front_state"] == "UNKNOWN" or
-                    info["left_danger"] > 0.35 or
-                    info["right_danger"] > 0.35
+                    info["left_danger"] > 0.65 or
+                    info["right_danger"] > 0.65
             )
         else:
             base_avoidance_active = (
                     info["depth_avoidance_active"] or
                     info["front_state"] == "OBSTACLE" or
-                    info["left_danger"] > 0.35 or
-                    info["right_danger"] > 0.35
+                    info["left_danger"] > 0.65 or
+                    info["right_danger"] > 0.65
             )
 
         base_avoidance_active = (
