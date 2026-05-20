@@ -1042,6 +1042,9 @@ class RealRobotDQNEnv(gym.Env):
             duration=CONTROL_DT
         )
 
+        send_cmd(self.ser, "S")
+        time.sleep(0.05)
+
         if latest_gyro is not None:
             self.latest_gyro = latest_gyro
 

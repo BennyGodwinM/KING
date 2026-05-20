@@ -1042,6 +1042,9 @@ class RealRobotDQNEnv(gym.Env):
             duration=CONTROL_DT
         )
 
+        send_cmd(self.ser, "S")
+        time.sleep(0.2)
+
         if latest_gyro is not None:
             self.latest_gyro = latest_gyro
 
@@ -1478,9 +1481,9 @@ class RealRobotDQNEnv(gym.Env):
             2
         )
 
-        cv2.imshow("Color View", display)
-        cv2.imshow("Mask", mask)
-        cv2.imshow("Depth View", depth_vis)
+        # cv2.imshow("Color View", display)
+        # cv2.imshow("Mask", mask)
+        # cv2.imshow("Depth View", depth_vis)
         cv2.waitKey(1)
 
 
