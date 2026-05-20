@@ -2,6 +2,8 @@ import math
 import time
 import csv
 import os
+import select
+import sys
 import serial
 import cv2
 import numpy as np
@@ -1246,7 +1248,21 @@ class RealRobotDQNEnv(gym.Env):
         self.episode_reward += reward
         self.global_step += 1
 
-        terminated = success or collision
+        manual_stop = False
+
+        # PuTTY terminal manual stop:
+        # Type q then press ENTER to immediately end the current episode.
+        # This does not add any new reward. The step keeps only the normal reward
+        # already calculated above, usually just the time penalty unless success/collision happened.
+        if select.select([sys.stdin], [], [], 0)[0]:
+            cmd = sys.stdin.readline().strip().lower()
+
+            if cmd == "q":
+                print("MANUAL EPISODE STOP")
+                manual_stop = True
+                send_cmd(self.ser, "S")
+
+        terminated = success or collision or manual_stop
         truncated = False
         done_flag = terminated or truncated
 
@@ -1566,6 +1582,7 @@ def train_model():
         )
 
     try:
+        print("Manual stop enabled: type q then press ENTER in PuTTY to end the current episode.")
         model.learn(
             total_timesteps=1000,
             reset_num_timesteps=True
