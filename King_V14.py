@@ -917,10 +917,29 @@ class RealRobotDQNEnv(gym.Env):
 
         target_like_front_object = False
 
-        if target_visible and target_range_for_compare is not None and front_min_depth_m is not None:
-            if abs(front_min_depth_m - target_range_for_compare) < TARGET_DEPTH_MATCH_THRESH:
-                if abs(theta_est_deg_obs) < TARGET_CENTER_MATCH_DEG:
+        # TARGET-LIKE DEPTH MATCH:
+        # If the target is visible and one of the nearest depth readings is
+        # about the same range as the filtered target estimate, treat that close
+        # depth object as the target instead of an obstacle.
+        #
+        # This checks the front box AND the left/center/right regions. This is
+        # better than only checking the front box because the target may be
+        # off-center while the robot is turning or approaching at an angle.
+        if target_visible and target_range_for_compare is not None:
+            depth_candidates = [
+                front_min_depth_m,
+                left_depth,
+                center_depth,
+                right_depth,
+            ]
+
+            for depth_candidate in depth_candidates:
+                if depth_candidate is None or not np.isfinite(depth_candidate):
+                    continue
+
+                if abs(depth_candidate - target_range_for_compare) < TARGET_DEPTH_MATCH_THRESH:
                     target_like_front_object = True
+                    break
 
         depth_avoidance_active = (
             front_min_depth_m is not None and
