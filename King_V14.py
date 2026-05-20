@@ -88,8 +88,8 @@ SUSPICIOUS_CLOSER_MARGIN = 0.20
 
 INVALID_DANGER_GAIN = 0.65
 DEPTH_DANGER_GAIN = 0.35
-AVOIDANCE_REWARD_GAIN = 0.35
-FORWARD_DANGER_PENALTY_GAIN = 0.75
+AVOIDANCE_REWARD_GAIN = 0.10
+FORWARD_DANGER_PENALTY_GAIN = 0.30
 TURN_TO_CLEAR_CENTER_BONUS_GAIN = 0.15
 STOP_DANGER_PENALTY_GAIN = 0.04
 
@@ -1538,9 +1538,9 @@ def train_model():
             train_freq=2,
             gradient_steps=1,
             target_update_interval=500,
-            exploration_fraction=0.6,
-            exploration_initial_eps=0.6,
-            exploration_final_eps=0.15,
+            exploration_fraction=0.3,
+            exploration_initial_eps=0.25,
+            exploration_final_eps=0.03,
             tensorboard_log="./dqn_tensorboard/"
         )
 
