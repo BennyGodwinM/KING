@@ -1156,12 +1156,12 @@ class RealRobotDQNEnv(gym.Env):
 
         # SUCCESS REWARD ONLY:
         # No distance progress reward and no angle shaping reward.
-        if curr_R_est < TARGET_REACHED_DIST_M:
+        if curr_R_est < TARGET_REACHED_DIST_M and action_char == "F":
             if abs(curr_theta_est_deg) < SUCCESS_ANGLE_THRESH_DEG:
                 reward_success = SUCCESS_REWARD + ANGLE_BONUS_REWARD
                 success = True
             else:
-                reward_success = 0.5 * (SUCCESS_REWARD + ANGLE_BONUS_REWARD)
+                reward_success = SUCCESS_REWARD
                 success = True
         else:
             # COLLISION / UNSAFE FORWARD TERMINATION:
