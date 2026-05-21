@@ -859,8 +859,9 @@ class RealRobotDQNEnv(gym.Env):
         )
 
         disable_avoidance_near_target = (
-            target_range_for_compare is not None and
-            target_range_for_compare < DISABLE_AVOIDANCE_NEAR_TARGET_DIST
+                target_visible and
+                target_range_for_compare is not None and
+                target_range_for_compare < DISABLE_AVOIDANCE_NEAR_TARGET_DIST
         )
 
         box_w = int(cw * 0.75)
