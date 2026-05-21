@@ -1599,7 +1599,7 @@ def train_model():
             gradient_steps=1,
             target_update_interval=500,
             exploration_fraction=0.9,
-            exploration_initial_eps=0.8,
+            exploration_initial_eps=0.7,
             exploration_final_eps=0.25,
             tensorboard_log="./dqn_tensorboard/"
         )
