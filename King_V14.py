@@ -1591,16 +1591,16 @@ def train_model():
             device="cpu",
             verbose=1,
             learning_rate=1e-4,
-            buffer_size=100000,
+            buffer_size=200000,
             learning_starts=300,
             batch_size=64,
             gamma=0.99,
             train_freq=2,
             gradient_steps=1,
             target_update_interval=500,
-            exploration_fraction=0.9,
-            exploration_initial_eps=0.4,
-            exploration_final_eps=0.03,
+            exploration_fraction=0.7,
+            exploration_initial_eps=0.5,
+            exploration_final_eps=0.15,
             tensorboard_log="./dqn_tensorboard/"
         )
 
