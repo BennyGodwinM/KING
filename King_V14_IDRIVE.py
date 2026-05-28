@@ -1086,6 +1086,12 @@ class RealRobotDQNEnv(gym.Env):
             duration=CONTROL_DT
         )
 
+        # IMPORTANT MANUAL CONTROL SAFETY:
+        # The Arduino treats F/L/R as continuous commands, so stop after
+        # each control window. This makes every manual keypress a short pulse:
+        # F/L/R for CONTROL_DT seconds, then S.
+        send_cmd(self.ser, "S")
+
         if latest_gyro is not None:
             self.latest_gyro = latest_gyro
 
