@@ -1677,7 +1677,7 @@ def print_manual_controls():
 
 
 def run_manual_demo():
-    env = RealRobotDQNEnv(render_mode=True)
+    env = RealRobotDQNEnv(render_mode=False)
     model = make_dqn_model(env)
 
     obs = None
