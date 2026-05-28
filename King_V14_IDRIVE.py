@@ -1710,6 +1710,8 @@ def print_manual_controls():
     print("f    = forward step")
     print("l    = left step")
     print("r    = right step")
+    print("fff  = three forward steps")
+    print("llff = two left steps, then two forward steps")
     print("stop = send stop command only, no replay transition")
     print("n    = reset episode")
     print("save = save model")
@@ -1736,7 +1738,7 @@ def run_manual_demo():
         done = False
 
         while True:
-            cmd = input("manual command [f/l/r/stop/n/save/q]: ").strip().lower()
+            cmd = input("manual command [f/l/r strings/stop/n/save/q]: ").strip().lower()
 
             if cmd == "":
                 continue
@@ -1764,50 +1766,59 @@ def run_manual_demo():
                 done = False
                 continue
 
-            if cmd not in KEY_TO_ACTION:
-                print("Unknown command. Use f, l, r, stop, n, save, or q.")
+            # Allow strings of actions, for example:
+            #   fff      -> F, F, F
+            #   llffff   -> L, L, F, F, F, F
+            #   rff      -> R, F, F
+            # Each character is still one normal env.step(), one reward,
+            # one CSV row, and one replay-buffer transition.
+            bad_chars = [c for c in cmd if c not in KEY_TO_ACTION]
+            if bad_chars:
+                print(f"Unknown command character(s): {bad_chars}. Use only f, l, r, stop, n, save, or q.")
                 continue
 
-            if done:
-                print("Episode was done. Resetting before next manual action.")
-                obs, _ = env.reset()
-                done = False
+            for action_cmd in cmd:
+                if done:
+                    print("Episode was done. Resetting before next manual action.")
+                    obs, _ = env.reset()
+                    done = False
 
-            action = KEY_TO_ACTION[cmd]
-            prev_obs = np.array(obs, dtype=np.float32).copy()
+                action = KEY_TO_ACTION[action_cmd]
+                prev_obs = np.array(obs, dtype=np.float32).copy()
 
-            next_obs, reward, terminated, truncated, info = env.step(action)
-            done = terminated or truncated
+                next_obs, reward, terminated, truncated, info = env.step(action)
+                done = terminated or truncated
 
-            add_ok = add_manual_transition_to_replay(
-                model=model,
-                obs=prev_obs,
-                action=action,
-                reward=reward,
-                next_obs=next_obs,
-                done=done,
-                info=info
-            )
+                add_ok = add_manual_transition_to_replay(
+                    model=model,
+                    obs=prev_obs,
+                    action=action,
+                    reward=reward,
+                    next_obs=next_obs,
+                    done=done,
+                    info=info
+                )
 
-            manual_step_count += 1
+                manual_step_count += 1
 
-            if add_ok:
-                train_from_manual_buffer_if_ready(model, manual_step_count)
-                update_target_network_if_needed(model, manual_step_count)
+                if add_ok:
+                    train_from_manual_buffer_if_ready(model, manual_step_count)
+                    update_target_network_if_needed(model, manual_step_count)
 
-            obs = next_obs
+                obs = next_obs
 
-            print(
-                f"manual_step={manual_step_count} action={ACTION_MEANINGS[action]} "
-                f"reward={reward:.3f} done={done} replay_size={model.replay_buffer.size()}"
-            )
+                print(
+                    f"manual_step={manual_step_count} action={ACTION_MEANINGS[action]} "
+                    f"reward={reward:.3f} done={done} replay_size={model.replay_buffer.size()}"
+                )
 
-            if manual_step_count % SAVE_EVERY_MANUAL_STEPS == 0:
-                model.save(MODEL_PATH)
-                print(f"Auto-saved model to {MODEL_PATH}")
+                if manual_step_count % SAVE_EVERY_MANUAL_STEPS == 0:
+                    model.save(MODEL_PATH)
+                    print(f"Auto-saved model to {MODEL_PATH}")
 
-            if done:
-                print("Episode ended. Press n to reset, or enter f/l/r and it will reset automatically.")
+                if done:
+                    print("Episode ended during command string. Remaining characters were skipped.")
+                    break
 
     finally:
         try:
