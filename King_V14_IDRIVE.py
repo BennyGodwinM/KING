@@ -12,6 +12,7 @@ import gymnasium as gym
 from gymnasium import spaces
 from stable_baselines3 import DQN
 from stable_baselines3.common.callbacks import BaseCallback
+from stable_baselines3.common.logger import configure
 
 
 SERIAL_PORT = "/dev/ttyACM0"
@@ -1627,6 +1628,8 @@ def make_dqn_model(env):
             exploration_final_eps=0.15,
             tensorboard_log="./dqn_tensorboard/"
         )
+    new_logger = configure("./logs/",["stdout"])
+    model.set_logger(new_logger)
 
     return model
 
