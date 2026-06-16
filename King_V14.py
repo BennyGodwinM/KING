@@ -1277,12 +1277,10 @@ class RealRobotDQNEnv(gym.Env):
                 reward_avoidance -= 0.05
 
             if action_char == "L":
-                reward_avoidance += AVOIDANCE_REWARD_GAIN * (right_danger - left_danger)
-                reward_avoidance += TURN_TO_CLEAR_CENTER_BONUS_GAIN * center_danger
+                reward_avoidance += 0.08 * (right_danger - left_danger)
 
             elif action_char == "R":
-                reward_avoidance += AVOIDANCE_REWARD_GAIN * (left_danger - right_danger)
-                reward_avoidance += TURN_TO_CLEAR_CENTER_BONUS_GAIN * center_danger
+                reward_avoidance += 0.08 * (left_danger - right_danger)
 
             elif action_char == "F":
                 reward_avoidance -= FORWARD_DANGER_PENALTY_GAIN * center_danger
@@ -1634,7 +1632,7 @@ def train_model():
             gradient_steps=1,
             target_update_interval=500,
             exploration_fraction=0.7,
-            exploration_initial_eps=0.6,
+            exploration_initial_eps=0.7,
             exploration_final_eps=0.15,
             tensorboard_log="./dqn_tensorboard/"
         )
