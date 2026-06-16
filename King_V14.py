@@ -45,7 +45,7 @@ TARGET_REACHED_DIST_M = 0.35
 SUCCESS_ANGLE_THRESH_DEG = 15.0
 
 FRONT_OBSTACLE_DISTANCE = 0.30
-AVOIDANCE_TRIGGER_DISTANCE = 0.50
+AVOIDANCE_TRIGGER_DISTANCE = 0.55
 FRONT_INVALID_THRESH = 0.50
 UNKNOWN_FRAMES_NEEDED = 4
 
@@ -55,6 +55,9 @@ DISABLE_AVOIDANCE_NEAR_TARGET_DIST = 0.55
 
 TARGET_DEPTH_MATCH_THRESH = 0.25
 TARGET_CENTER_MATCH_DEG = 18.0
+
+TARGET_BAND_Y1_FRAC = 0.00
+TARGET_BAND_Y2_FRAC = 0.35
 
 ACTION_MEANINGS = {
     0: "F",
@@ -880,9 +883,14 @@ class RealRobotDQNEnv(gym.Env):
         strip_y1 = int(ch * 0.35)
         strip_y2 = int(ch * 0.75)
 
+        target_band_y1 = int(ch * TARGET_BAND_Y1_FRAC)
+        target_band_y2 = int(ch * TARGET_BAND_Y2_FRAC)
+
         left_roi = depth_image[strip_y1:strip_y2, 0:third]
         center_roi = depth_image[strip_y1:strip_y2, third:2 * third]
         right_roi = depth_image[strip_y1:strip_y2, 2 * third:cw]
+        target_band_roi = depth_image[target_band_y1:target_band_y2, 0:cw]
+        target_band_min_depth_m = nearest_valid_depth_m(target_band_roi)
 
         left_depth = nearest_valid_depth_m(left_roi)
         center_depth = nearest_valid_depth_m(center_roi)
@@ -919,29 +927,49 @@ class RealRobotDQNEnv(gym.Env):
         right_danger = combined_direction_danger(right_depth, right_invalid_ratio, side_danger_distance)
 
         target_like_front_object = False
+        target_depth_match_disable_avoidance = False
+        target_in_band_roi = False
 
-        # TARGET-LIKE DEPTH MATCH:
-        # If the target is visible and one of the nearest depth readings is
-        # about the same range as the filtered target estimate, treat that close
-        # depth object as the target instead of an obstacle.
-        #
-        # This checks the front box AND the left/center/right regions. This is
-        # better than only checking the front box because the target may be
-        # off-center while the robot is turning or approaching at an angle.
+        if detection is not None:
+            target_u = detection["u"]
+            target_v = detection["v"]
+
+            target_in_band_roi = (
+                0 <= target_u < cw and
+                target_band_y1 <= target_v < target_band_y2
+            )
+
+        # BIG TARGET BAND ROI CHECK:
+        # If the target is visible inside the big ROI and the closest depth
+        # in that ROI matches R_est, treat it as the target and disable avoidance.
+        if (
+            target_visible and
+            target_in_band_roi and
+            target_range_for_compare is not None and
+            target_band_min_depth_m is not None and
+            np.isfinite(target_band_min_depth_m) and
+            abs(target_band_min_depth_m - target_range_for_compare) < TARGET_DEPTH_MATCH_THRESH
+        ):
+            target_like_front_object = True
+            target_depth_match_disable_avoidance = True
+
+        # BACKUP LEFT/CENTER/RIGHT DEPTH MATCH CHECK:
+        # If any L/C/R nearest depth matches R_est while target is visible,
+        # also treat it as the target and disable avoidance.
         if target_visible and target_range_for_compare is not None:
             depth_candidates = [
-                front_min_depth_m,
                 left_depth,
                 center_depth,
                 right_depth,
             ]
 
             for depth_candidate in depth_candidates:
-                if depth_candidate is None or not np.isfinite(depth_candidate):
+                if depth_candidate is None or not np.isfinite(depth_candidate) or depth_candidate <= 0:
                     continue
 
                 if abs(depth_candidate - target_range_for_compare) < TARGET_DEPTH_MATCH_THRESH:
                     target_like_front_object = True
+                    target_depth_match_disable_avoidance = True
                     break
 
         depth_avoidance_active = (
@@ -949,11 +977,13 @@ class RealRobotDQNEnv(gym.Env):
             front_min_depth_m < AVOIDANCE_TRIGGER_DISTANCE
         )
 
-        # HARD NEAR-TARGET OVERRIDE:
-        # If the filtered target estimate is close enough, completely disable
-        # every avoidance signal no matter what the depth image says.
-        # This prevents the target itself from being treated like an obstacle.
-        if disable_avoidance_near_target:
+        # HARD TARGET DEPTH OVERRIDE:
+        # Disable avoidance if either:
+        # 1. R_est is below the old near-target distance, or
+        # 2. the target is visible and the target-depth match logic says the close object is the target.
+        if disable_avoidance_near_target or target_depth_match_disable_avoidance:
+            disable_avoidance_near_target = True
+            ignore_invalids_near_target = True
             target_like_front_object = True
             depth_avoidance_active = False
             front_state = "SAFE"
@@ -1001,6 +1031,11 @@ class RealRobotDQNEnv(gym.Env):
             "ignore_invalids_near_target": ignore_invalids_near_target,
             "disable_avoidance_near_target": disable_avoidance_near_target,
             "target_like_front_object": target_like_front_object,
+            "target_depth_match_disable_avoidance": target_depth_match_disable_avoidance,
+            "target_in_band_roi": target_in_band_roi,
+            "target_band_y1": target_band_y1,
+            "target_band_y2": target_band_y2,
+            "target_band_min_depth_m": target_band_min_depth_m,
             "depth_avoidance_active": depth_avoidance_active,
             "front_state": front_state,
             "front_invalid_ratio": front_invalid_ratio,
@@ -1598,8 +1633,8 @@ def train_model():
             train_freq=2,
             gradient_steps=1,
             target_update_interval=500,
-            exploration_fraction=0.6,
-            exploration_initial_eps=0.7,
+            exploration_fraction=0.7,
+            exploration_initial_eps=0.6,
             exploration_final_eps=0.15,
             tensorboard_log="./dqn_tensorboard/"
         )
