@@ -981,7 +981,7 @@ class RealRobotDQNEnv(gym.Env):
         # Disable avoidance if either:
         # 1. R_est is below the old near-target distance, or
         # 2. the target is visible and the target-depth match logic says the close object is the target.
-        if disable_avoidance_near_target or target_depth_match_disable_avoidance:
+        if disable_avoidance_near_target:
             disable_avoidance_near_target = True
             ignore_invalids_near_target = True
             target_like_front_object = True
