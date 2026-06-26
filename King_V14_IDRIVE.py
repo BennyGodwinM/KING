@@ -1183,7 +1183,6 @@ class RealRobotDQNEnv(gym.Env):
             unsafe_forward = (
                     action_char == "F" and
                     (not info["disable_avoidance_near_target"]) and
-                    (not info["target_like_front_object"]) and
                     (
                             info["front_state"] == "OBSTACLE"
                             or info["front_state"] == "UNKNOWN"
@@ -1216,11 +1215,10 @@ class RealRobotDQNEnv(gym.Env):
 
         base_avoidance_active = (
                 base_avoidance_active and
-                (not info["target_like_front_object"]) and
                 (not info["disable_avoidance_near_target"])
         )
 
-        if info["target_like_front_object"] or info["disable_avoidance_near_target"]:
+        if info["disable_avoidance_near_target"]:
             self.avoidance_timer = 0
             avoidance_active = False
 
