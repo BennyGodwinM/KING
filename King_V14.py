@@ -939,35 +939,6 @@ class RealRobotDQNEnv(gym.Env):
                 target_band_y1 <= target_v < target_band_y2
             )
 
-        # BIG TARGET BAND ROI CHECK:
-        # If the target is visible inside the big ROI and the closest depth
-        # in that ROI matches R_est, treat it as the target and disable avoidance.
-        if (
-            target_visible and
-            target_in_band_roi and
-            target_range_for_compare is not None and
-            target_band_min_depth_m is not None and
-            np.isfinite(target_band_min_depth_m) and
-            abs(target_band_min_depth_m - target_range_for_compare) < TARGET_DEPTH_MATCH_THRESH
-        ):
-
-        # BACKUP LEFT/CENTER/RIGHT DEPTH MATCH CHECK:
-        # If any L/C/R nearest depth matches R_est while target is visible,
-        # also treat it as the target and disable avoidance.
-        if target_visible and target_range_for_compare is not None:
-            depth_candidates = [
-                left_depth,
-                center_depth,
-                right_depth,
-            ]
-
-            for depth_candidate in depth_candidates:
-                if depth_candidate is None or not np.isfinite(depth_candidate) or depth_candidate <= 0:
-                    continue
-
-                if abs(depth_candidate - target_range_for_compare) < TARGET_DEPTH_MATCH_THRESH:
-                    break
-
         depth_avoidance_active = (
             front_min_depth_m is not None and
             front_min_depth_m < AVOIDANCE_TRIGGER_DISTANCE
