@@ -950,8 +950,6 @@ class RealRobotDQNEnv(gym.Env):
             np.isfinite(target_band_min_depth_m) and
             abs(target_band_min_depth_m - target_range_for_compare) < TARGET_DEPTH_MATCH_THRESH
         ):
-            target_like_front_object = True
-            target_depth_match_disable_avoidance = True
 
         # BACKUP LEFT/CENTER/RIGHT DEPTH MATCH CHECK:
         # If any L/C/R nearest depth matches R_est while target is visible,
@@ -968,8 +966,6 @@ class RealRobotDQNEnv(gym.Env):
                     continue
 
                 if abs(depth_candidate - target_range_for_compare) < TARGET_DEPTH_MATCH_THRESH:
-                    target_like_front_object = True
-                    target_depth_match_disable_avoidance = True
                     break
 
         depth_avoidance_active = (
@@ -984,7 +980,6 @@ class RealRobotDQNEnv(gym.Env):
         if disable_avoidance_near_target:
             disable_avoidance_near_target = True
             ignore_invalids_near_target = True
-            target_like_front_object = True
             depth_avoidance_active = False
             front_state = "SAFE"
             front_invalid_ratio = 0.0
@@ -1268,17 +1263,25 @@ class RealRobotDQNEnv(gym.Env):
         # No angle bonus.
         # No clear-path forward bonus.
         if avoidance_active:
+            prev_center_danger = 0.0
+            if self.last_info is not None:
+                prev_center_danger = self.last_info.get("center_danger", center_danger)
+
+            center_danger_delta = prev_center_danger - center_danger
+
             if (
                     (self.prev_action_char == "L" and action_char == "R") or
                     (self.prev_action_char == "R" and action_char == "L")
             ):
-                reward_avoidance -= 0.05
+                reward_avoidance -= 0.20
 
             if action_char == "L":
                 reward_avoidance += 0.08 * (right_danger - left_danger)
+                reward_avoidance += 0.05 * center_danger_delta
 
             elif action_char == "R":
                 reward_avoidance += 0.08 * (left_danger - right_danger)
+                reward_avoidance += 0.05 * center_danger_delta
 
             elif action_char == "F":
                 reward_avoidance -= FORWARD_DANGER_PENALTY_GAIN * center_danger
