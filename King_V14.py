@@ -920,7 +920,7 @@ class RealRobotDQNEnv(gym.Env):
             front_state = "SAFE"
             self.unknown_counter = 0
 
-        side_danger_distance = AVOIDANCE_TRIGGER_DISTANCE * 1.6
+        side_danger_distance = AVOIDANCE_TRIGGER_DISTANCE * 1.2
 
         left_danger = combined_direction_danger(left_depth, left_invalid_ratio, side_danger_distance)
         center_danger = combined_direction_danger(center_depth, center_invalid_ratio, AVOIDANCE_TRIGGER_DISTANCE)
@@ -1256,7 +1256,7 @@ class RealRobotDQNEnv(gym.Env):
 
             elif action_char == "F":
                 reward_avoidance -= FORWARD_DANGER_PENALTY_GAIN * center_danger
-                reward_avoidance -= 0.20 * (left_danger + right_danger)
+                reward_avoidance -= 0.05 * (left_danger + right_danger)
 
             elif action_char == "S":
                 reward_avoidance -= STOP_DANGER_PENALTY_GAIN * (left_danger + center_danger + right_danger)
