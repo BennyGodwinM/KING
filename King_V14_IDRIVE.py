@@ -12,7 +12,6 @@ import gymnasium as gym
 from gymnasium import spaces
 from stable_baselines3 import DQN
 from stable_baselines3.common.callbacks import BaseCallback
-from stable_baselines3.common.logger import configure
 
 
 SERIAL_PORT = "/dev/ttyACM0"
@@ -46,7 +45,7 @@ TARGET_REACHED_DIST_M = 0.35
 SUCCESS_ANGLE_THRESH_DEG = 15.0
 
 FRONT_OBSTACLE_DISTANCE = 0.30
-AVOIDANCE_TRIGGER_DISTANCE = 0.50
+AVOIDANCE_TRIGGER_DISTANCE = 0.55
 FRONT_INVALID_THRESH = 0.50
 UNKNOWN_FRAMES_NEEDED = 4
 
@@ -56,6 +55,9 @@ DISABLE_AVOIDANCE_NEAR_TARGET_DIST = 0.55
 
 TARGET_DEPTH_MATCH_THRESH = 0.25
 TARGET_CENTER_MATCH_DEG = 18.0
+
+TARGET_BAND_Y1_FRAC = 0.00
+TARGET_BAND_Y2_FRAC = 0.35
 
 ACTION_MEANINGS = {
     0: "F",
@@ -881,9 +883,14 @@ class RealRobotDQNEnv(gym.Env):
         strip_y1 = int(ch * 0.35)
         strip_y2 = int(ch * 0.75)
 
+        target_band_y1 = int(ch * TARGET_BAND_Y1_FRAC)
+        target_band_y2 = int(ch * TARGET_BAND_Y2_FRAC)
+
         left_roi = depth_image[strip_y1:strip_y2, 0:third]
         center_roi = depth_image[strip_y1:strip_y2, third:2 * third]
         right_roi = depth_image[strip_y1:strip_y2, 2 * third:cw]
+        target_band_roi = depth_image[target_band_y1:target_band_y2, 0:cw]
+        target_band_min_depth_m = nearest_valid_depth_m(target_band_roi)
 
         left_depth = nearest_valid_depth_m(left_roi)
         center_depth = nearest_valid_depth_m(center_roi)
@@ -913,49 +920,37 @@ class RealRobotDQNEnv(gym.Env):
             front_state = "SAFE"
             self.unknown_counter = 0
 
-        side_danger_distance = AVOIDANCE_TRIGGER_DISTANCE * 1.6
+        side_danger_distance = AVOIDANCE_TRIGGER_DISTANCE * 1.2
 
         left_danger = combined_direction_danger(left_depth, left_invalid_ratio, side_danger_distance)
         center_danger = combined_direction_danger(center_depth, center_invalid_ratio, AVOIDANCE_TRIGGER_DISTANCE)
         right_danger = combined_direction_danger(right_depth, right_invalid_ratio, side_danger_distance)
 
         target_like_front_object = False
+        target_depth_match_disable_avoidance = False
+        target_in_band_roi = False
 
-        # TARGET-LIKE DEPTH MATCH:
-        # If the target is visible and one of the nearest depth readings is
-        # about the same range as the filtered target estimate, treat that close
-        # depth object as the target instead of an obstacle.
-        #
-        # This checks the front box AND the left/center/right regions. This is
-        # better than only checking the front box because the target may be
-        # off-center while the robot is turning or approaching at an angle.
-        if target_visible and target_range_for_compare is not None:
-            depth_candidates = [
-                front_min_depth_m,
-                left_depth,
-                center_depth,
-                right_depth,
-            ]
+        if detection is not None:
+            target_u = detection["u"]
+            target_v = detection["v"]
 
-            for depth_candidate in depth_candidates:
-                if depth_candidate is None or not np.isfinite(depth_candidate):
-                    continue
-
-                if abs(depth_candidate - target_range_for_compare) < TARGET_DEPTH_MATCH_THRESH:
-                    target_like_front_object = True
-                    break
+            target_in_band_roi = (
+                0 <= target_u < cw and
+                target_band_y1 <= target_v < target_band_y2
+            )
 
         depth_avoidance_active = (
             front_min_depth_m is not None and
             front_min_depth_m < AVOIDANCE_TRIGGER_DISTANCE
         )
 
-        # HARD NEAR-TARGET OVERRIDE:
-        # If the filtered target estimate is close enough, completely disable
-        # every avoidance signal no matter what the depth image says.
-        # This prevents the target itself from being treated like an obstacle.
+        # HARD TARGET DEPTH OVERRIDE:
+        # Disable avoidance if either:
+        # 1. R_est is below the old near-target distance, or
+        # 2. the target is visible and the target-depth match logic says the close object is the target.
         if disable_avoidance_near_target:
-            target_like_front_object = True
+            disable_avoidance_near_target = True
+            ignore_invalids_near_target = True
             depth_avoidance_active = False
             front_state = "SAFE"
             front_invalid_ratio = 0.0
@@ -1002,6 +997,11 @@ class RealRobotDQNEnv(gym.Env):
             "ignore_invalids_near_target": ignore_invalids_near_target,
             "disable_avoidance_near_target": disable_avoidance_near_target,
             "target_like_front_object": target_like_front_object,
+            "target_depth_match_disable_avoidance": target_depth_match_disable_avoidance,
+            "target_in_band_roi": target_in_band_roi,
+            "target_band_y1": target_band_y1,
+            "target_band_y2": target_band_y2,
+            "target_band_min_depth_m": target_band_min_depth_m,
             "depth_avoidance_active": depth_avoidance_active,
             "front_state": front_state,
             "front_invalid_ratio": front_invalid_ratio,
@@ -1087,11 +1087,6 @@ class RealRobotDQNEnv(gym.Env):
             duration=CONTROL_DT
         )
 
-        # IMPORTANT MANUAL CONTROL SAFETY:
-        # The Arduino treats F/L/R as continuous commands, so stop after
-        # each control window. This makes every manual keypress a short pulse:
-        # F/L/R for CONTROL_DT seconds, then S.
-        send_cmd(self.ser, "S")
 
         if latest_gyro is not None:
             self.latest_gyro = latest_gyro
@@ -1240,23 +1235,29 @@ class RealRobotDQNEnv(gym.Env):
         # No angle bonus.
         # No clear-path forward bonus.
         if avoidance_active:
+            prev_center_danger = 0.0
+            if self.last_info is not None:
+                prev_center_danger = self.last_info.get("center_danger", center_danger)
+
+            center_danger_delta = prev_center_danger - center_danger
+
             if (
                     (self.prev_action_char == "L" and action_char == "R") or
                     (self.prev_action_char == "R" and action_char == "L")
             ):
-                reward_avoidance -= 0.05
+                reward_avoidance -= 0.20
 
             if action_char == "L":
-                reward_avoidance += AVOIDANCE_REWARD_GAIN * (right_danger - left_danger)
-                reward_avoidance += TURN_TO_CLEAR_CENTER_BONUS_GAIN * center_danger
+                reward_avoidance += 0.08 * (right_danger - left_danger)
+                reward_avoidance += 0.05 * center_danger_delta
 
             elif action_char == "R":
-                reward_avoidance += AVOIDANCE_REWARD_GAIN * (left_danger - right_danger)
-                reward_avoidance += TURN_TO_CLEAR_CENTER_BONUS_GAIN * center_danger
+                reward_avoidance += 0.08 * (left_danger - right_danger)
+                reward_avoidance += 0.05 * center_danger_delta
 
             elif action_char == "F":
                 reward_avoidance -= FORWARD_DANGER_PENALTY_GAIN * center_danger
-                reward_avoidance -= 0.20 * (left_danger + right_danger)
+                reward_avoidance -= 0.05 * (left_danger + right_danger)
 
             elif action_char == "S":
                 reward_avoidance -= STOP_DANGER_PENALTY_GAIN * (left_danger + center_danger + right_danger)
@@ -1621,14 +1622,11 @@ def make_dqn_model(env):
             train_freq=2,
             gradient_steps=1,
             target_update_interval=500,
-            exploration_fraction=0.6,
-            exploration_initial_eps=0.6,
+            exploration_fraction=0.7,
+            exploration_initial_eps=0.7,
             exploration_final_eps=0.15,
             tensorboard_log="./dqn_tensorboard/"
         )
-    new_logger = configure("./logs/",["stdout"])
-    model.set_logger(new_logger)
-
     return model
 
 
