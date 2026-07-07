@@ -44,14 +44,14 @@ MAX_TURN_STEP_DEG = 45.0
 TARGET_REACHED_DIST_M = 0.35
 SUCCESS_ANGLE_THRESH_DEG = 15.0
 
-FRONT_OBSTACLE_DISTANCE = 0.30
+FRONT_OBSTACLE_DISTANCE = 0.4
 AVOIDANCE_TRIGGER_DISTANCE = 0.55
 FRONT_INVALID_THRESH = 0.50
 UNKNOWN_FRAMES_NEEDED = 4
 
 MAX_OBS_DISTANCE = 10.0
 IGNORE_INVALIDS_NEAR_TARGET_DIST = 0.4
-DISABLE_AVOIDANCE_NEAR_TARGET_DIST = 0.55
+DISABLE_AVOIDANCE_NEAR_TARGET_DIST = 0.57
 
 TARGET_DEPTH_MATCH_THRESH = 0.25
 TARGET_CENTER_MATCH_DEG = 18.0
@@ -1244,19 +1244,24 @@ class RealRobotDQNEnv(gym.Env):
                     (self.prev_action_char == "L" and action_char == "R") or
                     (self.prev_action_char == "R" and action_char == "L")
             ):
-                reward_avoidance -= 0.20
+                reward_avoidance -= 0.10
 
             if action_char == "L":
-                reward_avoidance += 0.08 * (right_danger - left_danger)
-                reward_avoidance += 0.05 * center_danger_delta
+                reward_avoidance += 0.10 * (right_danger - left_danger)
+                reward_avoidance += 0.04 * center_danger
+                reward_avoidance += 0.08 * max(0.0, center_danger_delta)
 
             elif action_char == "R":
-                reward_avoidance += 0.08 * (left_danger - right_danger)
-                reward_avoidance += 0.05 * center_danger_delta
+                reward_avoidance += 0.10 * (left_danger - right_danger)
+                reward_avoidance += 0.04 * center_danger
+                reward_avoidance += 0.08 * max(0.0, center_danger_delta)
 
             elif action_char == "F":
-                reward_avoidance -= FORWARD_DANGER_PENALTY_GAIN * center_danger
-                reward_avoidance -= 0.05 * (left_danger + right_danger)
+                reward_avoidance -= 0.45 * center_danger
+                reward_avoidance -= 0.08 * (left_danger + right_danger)
+
+                if center_danger < 0.20 and left_danger < 0.75 and right_danger < 0.75:
+                    reward_avoidance += 0.12
 
             elif action_char == "S":
                 reward_avoidance -= STOP_DANGER_PENALTY_GAIN * (left_danger + center_danger + right_danger)
@@ -1584,10 +1589,18 @@ class RealRobotDQNEnv(gym.Env):
 
 def train_model():
     env = RealRobotDQNEnv(render_mode=False)
+    buffer_path = MODEL_PATH + "_replay_buffer.pkl"
 
     if os.path.exists(MODEL_PATH + ".zip"):
         print("Loading existing DQN model...")
         model = DQN.load(MODEL_PATH, env=env, device="cpu")
+
+        if os.path.exists(buffer_path):
+            print("Loading existing replay buffer...")
+            model.load_replay_buffer(buffer_path)
+        else:
+            print("No replay buffer found. Starting with empty buffer.")
+
     else:
         print("Creating new DQN model...")
         model = DQN(
@@ -1596,7 +1609,7 @@ def train_model():
             device="cpu",
             verbose=1,
             learning_rate=1e-4,
-            buffer_size=500000,
+            buffer_size=1000000,
             learning_starts=500,
             batch_size=64,
             gamma=0.99,
@@ -1613,10 +1626,13 @@ def train_model():
         print("Manual stop enabled: type q then press ENTER in PuTTY to end the current episode.")
         model.learn(
             total_timesteps=1000,
-            reset_num_timesteps=True
+            reset_num_timesteps=False
         )
         model.save(MODEL_PATH)
+        model.save_replay_buffer(MODEL_PATH +"_replay_buffer")
+
         print(f"Saved model to {MODEL_PATH}")
+        print(f"Saved replay buffer to {buffer_path}")
         print(f"Step log saved to {LOG_PATH}")
     finally:
         env.close()
