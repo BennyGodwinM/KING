@@ -52,10 +52,13 @@ UNKNOWN_FRAMES_NEEDED = 4
 
 MAX_OBS_DISTANCE = 10.0
 IGNORE_INVALIDS_NEAR_TARGET_DIST = 0.4
-DISABLE_AVOIDANCE_NEAR_TARGET_DIST = 0.55
+DISABLE_AVOIDANCE_NEAR_TARGET_DIST = 0.57
 
 TARGET_DEPTH_MATCH_THRESH = 0.25
 TARGET_CENTER_MATCH_DEG = 18.0
+
+TARGET_BAND_Y1_FRAC = 0.00
+TARGET_BAND_Y2_FRAC = 0.35
 
 ACTION_MEANINGS = {
     0: "F",
@@ -881,9 +884,14 @@ class RealRobotDQNEnv(gym.Env):
         strip_y1 = int(ch * 0.35)
         strip_y2 = int(ch * 0.75)
 
+        target_band_y1 = int(ch * TARGET_BAND_Y1_FRAC)
+        target_band_y2 = int(ch * TARGET_BAND_Y2_FRAC)
+
         left_roi = depth_image[strip_y1:strip_y2, 0:third]
         center_roi = depth_image[strip_y1:strip_y2, third:2 * third]
         right_roi = depth_image[strip_y1:strip_y2, 2 * third:cw]
+        target_band_roi = depth_image[target_band_y1:target_band_y2, 0:cw]
+        target_band_min_depth_m = nearest_valid_depth_m(target_band_roi)
 
         left_depth = nearest_valid_depth_m(left_roi)
         center_depth = nearest_valid_depth_m(center_roi)
@@ -920,20 +928,30 @@ class RealRobotDQNEnv(gym.Env):
         right_danger = combined_direction_danger(right_depth, right_invalid_ratio, side_danger_distance)
 
         target_like_front_object = False
+        target_depth_match_disable_avoidance = False
+        target_in_band_roi = False
 
-        # Target-like depth matching removed.
-        # Only disable_avoidance_near_target can disable avoidance near the target.
+        if detection is not None:
+            target_u = detection["u"]
+            target_v = detection["v"]
+
+            target_in_band_roi = (
+                0 <= target_u < cw and
+                target_band_y1 <= target_v < target_band_y2
+            )
 
         depth_avoidance_active = (
             front_min_depth_m is not None and
             front_min_depth_m < AVOIDANCE_TRIGGER_DISTANCE
         )
 
-        # HARD NEAR-TARGET OVERRIDE:
-        # If the filtered target estimate is close enough, completely disable
-        # every avoidance signal no matter what the depth image says.
-        # This prevents the target itself from being treated like an obstacle.
+        # HARD TARGET DEPTH OVERRIDE:
+        # Disable avoidance if either:
+        # 1. R_est is below the old near-target distance, or
+        # 2. the target is visible and the target-depth match logic says the close object is the target.
         if disable_avoidance_near_target:
+            disable_avoidance_near_target = True
+            ignore_invalids_near_target = True
             depth_avoidance_active = False
             front_state = "SAFE"
             front_invalid_ratio = 0.0
@@ -980,6 +998,11 @@ class RealRobotDQNEnv(gym.Env):
             "ignore_invalids_near_target": ignore_invalids_near_target,
             "disable_avoidance_near_target": disable_avoidance_near_target,
             "target_like_front_object": target_like_front_object,
+            "target_depth_match_disable_avoidance": target_depth_match_disable_avoidance,
+            "target_in_band_roi": target_in_band_roi,
+            "target_band_y1": target_band_y1,
+            "target_band_y2": target_band_y2,
+            "target_band_min_depth_m": target_band_min_depth_m,
             "depth_avoidance_active": depth_avoidance_active,
             "front_state": front_state,
             "front_invalid_ratio": front_invalid_ratio,
@@ -1228,19 +1251,24 @@ class RealRobotDQNEnv(gym.Env):
                     (self.prev_action_char == "L" and action_char == "R") or
                     (self.prev_action_char == "R" and action_char == "L")
             ):
-                reward_avoidance -= 0.20
+                reward_avoidance -= 0.10
 
             if action_char == "L":
-                reward_avoidance += 0.08 * (right_danger - left_danger)
-                reward_avoidance += 0.05 * center_danger_delta
+                reward_avoidance += 0.10 * (right_danger - left_danger)
+                reward_avoidance += 0.04 * center_danger
+                reward_avoidance += 0.08 * max(0.0, center_danger_delta)
 
             elif action_char == "R":
-                reward_avoidance += 0.08 * (left_danger - right_danger)
-                reward_avoidance += 0.05 * center_danger_delta
+                reward_avoidance += 0.10 * (left_danger - right_danger)
+                reward_avoidance += 0.04 * center_danger
+                reward_avoidance += 0.08 * max(0.0, center_danger_delta)
 
             elif action_char == "F":
-                reward_avoidance -= FORWARD_DANGER_PENALTY_GAIN * center_danger
-                reward_avoidance -= 0.05 * (left_danger + right_danger)
+                reward_avoidance -= 0.45 * center_danger
+                reward_avoidance -= 0.08 * (left_danger + right_danger)
+
+                if center_danger < 0.20 and left_danger < 0.75 and right_danger < 0.75:
+                    reward_avoidance += 0.12
 
             elif action_char == "S":
                 reward_avoidance -= STOP_DANGER_PENALTY_GAIN * (left_danger + center_danger + right_danger)
