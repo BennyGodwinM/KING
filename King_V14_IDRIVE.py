@@ -73,7 +73,7 @@ ANGLE_BONUS_REWARD = 25.0
 COLLISION_PENALTY = -35.0
 DISTANCE_DELTA_GAIN = 8.0
 ANGLE_DELTA_GAIN = 0.015
-TIME_PENALTY_GAIN = 0.35
+TIME_PENALTY_GAIN = 0.45
 
 CENTERED_FORWARD_ANGLE_DEG = 7.0
 FORWARD_CLEAR_BONUS = 0.15
@@ -92,7 +92,7 @@ MAX_R_REAL_FRAME_JUMP = 0.15
 MIN_STABLE_R_FRAMES = 2
 SUSPICIOUS_CLOSER_MARGIN = 0.20
 
-INVALID_DANGER_GAIN = 0.25
+INVALID_DANGER_GAIN = 0.40
 DEPTH_DANGER_GAIN = 0.75
 AVOIDANCE_REWARD_GAIN = 0.02
 FORWARD_DANGER_PENALTY_GAIN = 0.30
@@ -494,8 +494,17 @@ def depth_danger_from_distance(depth_m, danger_distance):
 
 
 def combined_direction_danger(depth_m, inv_ratio, danger_distance):
-    inv_part = INVALID_DANGER_GAIN * clip_ratio(inv_ratio)
+    inv_ratio = clip_ratio(inv_ratio)
+
+    # If the ROI is mostly invalid, treat it as a high-danger region.
+    # This prevents danger from collapsing when a close obstacle causes
+    # the depth camera to lose almost all valid pixels.
+    if inv_ratio >= 0.75:
+        return 0.75
+
+    inv_part = INVALID_DANGER_GAIN * inv_ratio
     depth_part = DEPTH_DANGER_GAIN * depth_danger_from_distance(depth_m, danger_distance)
+
     return float(np.clip(inv_part + depth_part, 0.0, 1.0))
 
 
@@ -1048,9 +1057,49 @@ class RealRobotDQNEnv(gym.Env):
         send_cmd(self.ser, "S")
         time.sleep(0.3)
 
-        print("\nRESET EPISODE")
-        print("Place robot and target, then press ENTER.")
+        print("\nRESET EPISODE - TWO STAGE MANUAL SETUP")
+        print("STAGE 1: Place robot and make the target clearly visible.")
+        print("Press ENTER to acquire the target R_est/theta before adding obstacles.")
         input()
+
+        acquire_obs, acquire_info = None, None
+        while acquire_obs is None or acquire_info is None or not acquire_info.get("target_visible", False):
+            self._update_gyro()
+            self._update_encoders()
+            acquire_obs, acquire_info = self._get_camera_and_estimate()
+
+            if acquire_info is None or not acquire_info.get("target_visible", False):
+                print("Target not visible yet. Adjust target/robot and press ENTER to try again.")
+                input()
+
+        captured_R = self.R_est
+        captured_theta = self.theta_est
+        captured_x = self.x_est
+        captured_z = self.z_est
+
+        captured_R_disp = "NA" if captured_R is None else f"{captured_R:.3f} m"
+        captured_theta_disp = "NA" if captured_theta is None else f"{rad_to_deg(captured_theta):.2f} deg"
+
+        print("\nTARGET ACQUIRED")
+        print(f"Captured R_est = {captured_R_disp}")
+        print(f"Captured theta = {captured_theta_disp}")
+        print("STAGE 2: Now place the obstacle(s) in front, even if they totally block the target.")
+        print("Press ENTER when ready to start manual data collection.")
+        input()
+
+        # Keep the acquired target estimate as the hidden-target initial state.
+        # After obstacles are placed, the target may be fully blocked, so the
+        # next camera update will use this saved R/theta estimate instead of
+        # needing the target to still be visible.
+        self.R_est = captured_R
+        self.theta_est = captured_theta
+        self.x_est = captured_x
+        self.z_est = captured_z
+
+        self.R_pure = captured_R
+        self.theta_pure = captured_theta
+        self.x_pure = captured_x
+        self.z_pure = captured_z
 
         obs, info = None, None
         while obs is None:
@@ -1059,7 +1108,7 @@ class RealRobotDQNEnv(gym.Env):
             obs, info = self._get_camera_and_estimate()
 
         self.prev_R_est = float(obs[0])
-        self.prev_theta_est_deg = 0.0
+        self.prev_theta_est_deg = rad_to_deg(math.atan2(obs[6], obs[7]))
 
         self.last_obs = obs
         self.last_info = info
@@ -1265,9 +1314,9 @@ class RealRobotDQNEnv(gym.Env):
 
             elif action_char == "F":
                 reward_avoidance -= 0.45 * center_danger
-                reward_avoidance -= 0.08 * (left_danger + right_danger)
+                reward_avoidance -= 0.15 * (left_danger + right_danger)
 
-                if center_danger < 0.20 and left_danger < 0.75 and right_danger < 0.75:
+                if center_danger < 0.20 and left_danger < 0.50 and right_danger < 0.50:
                     reward_avoidance += 0.12
 
             elif action_char == "S":
