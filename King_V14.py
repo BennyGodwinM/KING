@@ -1057,7 +1057,7 @@ class RealRobotDQNEnv(gym.Env):
         time.sleep(0.3)
 
         print("\nRESET EPISODE")
-        print("Place robot and target, then press ENTER.")
+        print("STAGE 1: Place robot and target with the target visible, then press ENTER to acquire target.")
         input()
 
         obs, info = None, None
@@ -1066,8 +1066,46 @@ class RealRobotDQNEnv(gym.Env):
             self._update_encoders()
             obs, info = self._get_camera_and_estimate()
 
+        # Save the acquired target estimate before obstacles are placed.
+        # This lets the episode begin with the target fully blocked while
+        # still using the correct initial R_est/theta estimate.
+        acquired_x_est = self.x_est
+        acquired_z_est = self.z_est
+        acquired_theta_est = self.theta_est
+        acquired_R_est = self.R_est
+
+        acquired_x_pure = self.x_pure
+        acquired_z_pure = self.z_pure
+        acquired_theta_pure = self.theta_pure
+        acquired_R_pure = self.R_pure
+
+        print(
+            f"Target acquired: R_est={float(obs[0]):.3f} m, "
+            f"theta_est={rad_to_deg(self.theta_est) if self.theta_est is not None else 0.0:.2f} deg"
+        )
+        print("STAGE 2: Place obstacle(s) in front/blocking the target, then press ENTER to start episode.")
+        input()
+
+        # Restore the acquired estimate after the obstacle placement pause.
+        # Then take one fresh camera/depth observation for the actual start state.
+        self.x_est = acquired_x_est
+        self.z_est = acquired_z_est
+        self.theta_est = acquired_theta_est
+        self.R_est = acquired_R_est
+
+        self.x_pure = acquired_x_pure
+        self.z_pure = acquired_z_pure
+        self.theta_pure = acquired_theta_pure
+        self.R_pure = acquired_R_pure
+
+        obs, info = None, None
+        while obs is None:
+            self._update_gyro()
+            self._update_encoders()
+            obs, info = self._get_camera_and_estimate()
+
         self.prev_R_est = float(obs[0])
-        self.prev_theta_est_deg = 0.0
+        self.prev_theta_est_deg = rad_to_deg(math.atan2(obs[6], obs[7]))
 
         self.last_obs = obs
         self.last_info = info
