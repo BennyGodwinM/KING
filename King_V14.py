@@ -1663,9 +1663,9 @@ def train_model():
             train_freq=2,
             gradient_steps=1,
             target_update_interval=500,
-            exploration_fraction=0.7,
-            exploration_initial_eps=0.7,
-            exploration_final_eps=0.03,
+            exploration_fraction=0.3,
+            exploration_initial_eps=0.15,
+            exploration_final_eps=0.02,
             tensorboard_log="./dqn_tensorboard/"
         )
 
