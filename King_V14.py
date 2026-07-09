@@ -493,8 +493,17 @@ def depth_danger_from_distance(depth_m, danger_distance):
 
 
 def combined_direction_danger(depth_m, inv_ratio, danger_distance):
-    inv_part = INVALID_DANGER_GAIN * clip_ratio(inv_ratio)
+    inv_ratio = clip_ratio(inv_ratio)
+
+    # If the ROI is mostly invalid, treat it as a high-danger region.
+    # This prevents danger from collapsing when a close obstacle causes
+    # the depth camera to lose almost all valid pixels.
+    if inv_ratio >= 0.75:
+        return 0.75
+
+    inv_part = INVALID_DANGER_GAIN * inv_ratio
     depth_part = DEPTH_DANGER_GAIN * depth_danger_from_distance(depth_m, danger_distance)
+
     return float(np.clip(inv_part + depth_part, 0.0, 1.0))
 
 
