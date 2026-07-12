@@ -1649,7 +1649,7 @@ class RealRobotDQNEnv(gym.Env):
 # learning_starts=500, train_freq=2, gradient_steps=1,
 # batch_size=64, target_update_interval=500.
 DEMO_TRAINING_ENABLED = True
-DEMO_LEARNING_STARTS = 500
+DEMO_LEARNING_STARTS = 64
 DEMO_TRAIN_FREQ = 2
 DEMO_GRADIENT_STEPS = 1
 DEMO_BATCH_SIZE = 64
@@ -1664,9 +1664,18 @@ KEY_TO_ACTION = {
 
 
 def make_dqn_model(env):
+    buffer_path = MODEL_PATH + "_replay_buffer.pkl"
+
     if os.path.exists(MODEL_PATH + ".zip"):
         print("Loading existing DQN model for manual demonstrations...")
         model = DQN.load(MODEL_PATH, env=env, device="cpu")
+
+        if os.path.exists(buffer_path):
+            print("Loading existing replay buffer...")
+            model.load_replay_buffer(buffer_path)
+        else:
+            print("No replay buffer found. Starting with empty buffer.")
+
     else:
         print("Creating new DQN model for manual demonstrations...")
         model = DQN(
@@ -1676,7 +1685,7 @@ def make_dqn_model(env):
             verbose=1,
             learning_rate=1e-4,
             buffer_size=500000,
-            learning_starts=500,
+            learning_starts=64,
             batch_size=64,
             gamma=0.99,
             train_freq=2,
@@ -1687,7 +1696,8 @@ def make_dqn_model(env):
             exploration_final_eps=0.15,
             tensorboard_log="./dqn_tensorboard/"
         )
-    new_logger = configure("./logs/",["stdout"])
+
+    new_logger = configure("./logs/", ["stdout"])
     model.set_logger(new_logger)
 
     return model
@@ -1808,13 +1818,17 @@ def run_manual_demo():
             if cmd == "q":
                 env.stop_robot()
                 model.save(MODEL_PATH)
+                model.save_replay_buffer(MODEL_PATH + "_replay_buffer.pkl")
                 print(f"Saved model to {MODEL_PATH}")
+                print(f"Saved replay buffer.")
                 print(f"Step log saved to {LOG_PATH}")
                 break
 
             if cmd == "save":
                 model.save(MODEL_PATH)
+                model.save_replay_buffer(MODEL_PATH + "_replay_buffer.pkl")
                 print(f"Saved model to {MODEL_PATH}")
+                print("Saved replay buffer.")
                 continue
 
             if cmd == "stop" or cmd == "s":
@@ -1876,6 +1890,7 @@ def run_manual_demo():
 
                 if manual_step_count % SAVE_EVERY_MANUAL_STEPS == 0:
                     model.save(MODEL_PATH)
+                    model.save_replay_buffer(MODEL_PATH + "_replay_buffer.pkl")
                     print(f"Auto-saved model to {MODEL_PATH}")
 
                 if done:
@@ -1887,11 +1902,15 @@ def run_manual_demo():
             env.stop_robot()
         except Exception:
             pass
+
         try:
             model.save(MODEL_PATH)
+            model.save_replay_buffer(MODEL_PATH + "_replay_buffer.pkl")
             print(f"Saved model to {MODEL_PATH}")
+            print("Saved replay buffer.")
         except Exception as e:
-            print("Final model save failed:", e)
+            print("Final model/replay buffer save failed:", e)
+
         env.close()
 
 
