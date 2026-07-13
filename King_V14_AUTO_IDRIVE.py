@@ -2047,8 +2047,10 @@ def choose_auto_action(model, obs, info, env, controller_state):
         controller_state["clear_frames"] = 0
         controller_state["forced_forward_steps"] = 0
 
-        action, _ = model.predict(obs, deterministic=True)
-        return int(action), "DQN: avoidance disabled near target"
+        # If this happened after an avoidance maneuver, keep recentering.
+        if not controller_state["recenter_after_avoidance"]:
+            action, _ = model.predict(obs, deterministic=True)
+            return int(action), "DQN: avoidance disabled near target"
 
     # Finish the clean demonstration sequence with a couple forward actions
     # after the obstacle has been cleared.
@@ -2071,12 +2073,32 @@ def choose_auto_action(model, obs, info, env, controller_state):
         if controller_state["clear_frames"] >= AUTO_CLEAR_FRAMES_NEEDED:
             controller_state["committed_action"] = None
             controller_state["clear_frames"] = 0
-            controller_state["forced_forward_steps"] = max(
-                0, AUTO_FORWARD_STEPS_AFTER_CLEAR - 1
-            )
-            return 0, "EXPERT: obstacle cleared -> forward"
+            controller_state["forced_forward_steps"] = 0
+            controller_state["recenter_after_avoidance"] = True
+        else:
+            return int(committed_action), "EXPERT: committed turn"
 
-        return int(committed_action), "EXPERT: committed turn"
+    if controller_state["recenter_after_avoidance"]:
+        # If avoidance becomes active again, stop recentering and handle the obstacle.
+        if current_auto_avoidance_trigger(info):
+            controller_state["recenter_after_avoidance"] = False
+        else:
+            theta_deg = math.degrees(
+                math.atan2(float(obs[6]), float(obs[7]))
+            )
+
+            if theta_deg > AUTO_TARGET_CENTER_DEADBAND_DEG:
+                return 2, f"EXPERT: recenter right after avoidance theta={theta_deg:.1f}"
+
+            elif theta_deg < -AUTO_TARGET_CENTER_DEADBAND_DEG:
+                return 1, f"EXPERT: recenter left after avoidance theta={theta_deg:.1f}"
+
+            else:
+                controller_state["recenter_after_avoidance"] = False
+                controller_state["forced_forward_steps"] = max(
+                    0, AUTO_FORWARD_STEPS_AFTER_CLEAR - 1
+                )
+                return 0, f"EXPERT: recentered -> forward theta={theta_deg:.1f}"
 
     if current_auto_avoidance_trigger(info):
         action, reason = choose_new_expert_turn(info, env.episode_index)
@@ -2117,6 +2139,7 @@ def run_auto_demo():
         "committed_action": None,
         "clear_frames": 0,
         "forced_forward_steps": 0,
+        "recenter_after_avoidance": False,
     }
 
     try:
@@ -2133,6 +2156,7 @@ def run_auto_demo():
                     "committed_action": None,
                     "clear_frames": 0,
                     "forced_forward_steps": 0,
+                    "recenter_after_avoidance": False,
                 }
 
             current_info = env.last_info
