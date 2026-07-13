@@ -1940,6 +1940,7 @@ AUTO_CLEAR_CENTER_DANGER = 0.15
 AUTO_CLEAR_SIDE_DANGER = 0.35
 AUTO_TIE_DANGER_MARGIN = 0.03
 AUTO_FORWARD_STEPS_AFTER_CLEAR = 2
+AUTO_TARGET_CENTER_DEADBAND_DEG = 7.0
 SAVE_EVERY_AUTO_STEPS = 25
 
 
@@ -2032,8 +2033,14 @@ def choose_auto_action(model, obs, info, env, controller_state):
         forced_forward_steps: clean forward steps immediately after clearance
     """
     if info is None:
-        action, _ = model.predict(obs, deterministic=True)
-        return int(action), "DQN: no current info"
+        theta_deg = math.degrees(math.atan2(float(obs[6]), float(obs[7])))
+
+        if theta_deg > AUTO_TARGET_CENTER_DEADBAND_DEG:
+            return 2, "EXPERT: center target right"
+        elif theta_deg < -AUTO_TARGET_CENTER_DEADBAND_DEG:
+            return 1, "EXPERT: center target left"
+        else:
+            return 0, "EXPERT: target centered -> forward"
 
     if info.get("disable_avoidance_near_target", False):
         controller_state["committed_action"] = None
