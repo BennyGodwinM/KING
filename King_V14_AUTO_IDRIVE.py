@@ -2046,11 +2046,7 @@ def choose_auto_action(model, obs, info, env, controller_state):
         controller_state["committed_action"] = None
         controller_state["clear_frames"] = 0
         controller_state["forced_forward_steps"] = 0
-
-        # If this happened after an avoidance maneuver, keep recentering.
-        if not controller_state["recenter_after_avoidance"]:
-            action, _ = model.predict(obs, deterministic=True)
-            return int(action), "DQN: avoidance disabled near target"
+        controller_state["recenter_after_avoidance"] = True
 
     # Finish the clean demonstration sequence with a couple forward actions
     # after the obstacle has been cleared.
@@ -2106,8 +2102,18 @@ def choose_auto_action(model, obs, info, env, controller_state):
         controller_state["clear_frames"] = 0
         return int(action), f"EXPERT: {reason}"
 
-    action, _ = model.predict(obs, deterministic=True)
-    return int(action), "DQN: clear-path navigation"
+    theta_deg = math.degrees(
+        math.atan2(float(obs[6]), float(obs[7]))
+    )
+
+    if theta_deg > AUTO_TARGET_CENTER_DEADBAND_DEG:
+        return 2, f"EXPERT: target right -> turn right theta={theta_deg:.1f}"
+
+    elif theta_deg < -AUTO_TARGET_CENTER_DEADBAND_DEG:
+        return 1, f"EXPERT: target left -> turn left theta={theta_deg:.1f}"
+
+    else:
+        return 0, f"EXPERT: target centered -> forward theta={theta_deg:.1f}"
 
 
 def print_auto_controls():
