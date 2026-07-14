@@ -1936,7 +1936,7 @@ def run_manual_demo():
 # =============================================================================
 
 AUTO_CLEAR_FRAMES_NEEDED = 2
-AUTO_CLEAR_CENTER_DANGER = 0.15
+AUTO_CLEAR_CENTER_DANGER = 0.20
 AUTO_CLEAR_SIDE_DANGER = 0.35
 AUTO_TIE_DANGER_MARGIN = 0.03
 AUTO_FORWARD_STEPS_AFTER_CLEAR = 2
