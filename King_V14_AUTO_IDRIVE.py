@@ -1936,7 +1936,7 @@ def run_manual_demo():
 # =============================================================================
 
 AUTO_CLEAR_FRAMES_NEEDED = 2
-AUTO_CLEAR_CENTER_DANGER = 0.20
+AUTO_CLEAR_CENTER_DANGER = 0.15
 AUTO_CLEAR_SIDE_DANGER = 0.35
 AUTO_TIE_DANGER_MARGIN = 0.03
 AUTO_FORWARD_STEPS_AFTER_CLEAR = 2
@@ -2051,8 +2051,14 @@ def choose_auto_action(model, obs, info, env, controller_state):
     # Finish the clean demonstration sequence with a couple forward actions
     # after the obstacle has been cleared.
     if controller_state["forced_forward_steps"] > 0:
-        if current_auto_avoidance_trigger(info):
-            # A new obstacle/noisy re-trigger appeared. Resume expert handling.
+        forward_is_unsafe = (
+                info.get("front_state") == "OBSTACLE"
+                or info.get("front_state") == "UNKNOWN"
+                or info.get("depth_avoidance_active", False)
+                or info.get("center_danger", 1.0) >= AUTO_CLEAR_CENTER_DANGER
+        )
+
+        if forward_is_unsafe:
             controller_state["forced_forward_steps"] = 0
         else:
             controller_state["forced_forward_steps"] -= 1
@@ -2069,8 +2075,14 @@ def choose_auto_action(model, obs, info, env, controller_state):
         if controller_state["clear_frames"] >= AUTO_CLEAR_FRAMES_NEEDED:
             controller_state["committed_action"] = None
             controller_state["clear_frames"] = 0
-            controller_state["forced_forward_steps"] = 0
-            controller_state["recenter_after_avoidance"] = True
+            controller_state["recenter_after_avoidance"] = False
+
+            # Use the first forced-forward action immediately.
+            controller_state["forced_forward_steps"] = max(
+                0, AUTO_FORWARD_STEPS_AFTER_CLEAR - 1
+            )
+            return 0, "EXPERT: first forward after clearance"
+
         else:
             return int(committed_action), "EXPERT: committed turn"
 
@@ -2208,6 +2220,8 @@ def run_auto_demo():
                 f"auto_step={auto_step_count} action={ACTION_MEANINGS[action]} "
                 f"source='{action_source}' committed={committed_char} "
                 f"clear_frames={controller_state['clear_frames']} "
+                f"forced_forward={controller_state['forced_forward_steps']} "
+                f"recenter={controller_state['recenter_after_avoidance']} "
                 f"reward={reward:.3f} done={done} "
                 f"replay_size={model.replay_buffer.size()}"
             )
