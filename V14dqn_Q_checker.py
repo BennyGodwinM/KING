@@ -139,4 +139,18 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+
+    except KeyboardInterrupt:
+        print("\nStopping Q Checker...")
+
+    finally:
+        try:
+            env = RealRobotDQNEnv(render_mode=False)
+            env.send_motor_command("S")
+            env.close()
+        except Exception:
+            pass
+
+        print("Robot stopped.")
