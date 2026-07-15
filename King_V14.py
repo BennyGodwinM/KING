@@ -1340,7 +1340,7 @@ class RealRobotDQNEnv(gym.Env):
                 reward_avoidance -= 0.20 * (left_danger + right_danger)
 
                 if center_danger < 0.15 and left_danger < 0.35 and right_danger < 0.35:
-                    reward_avoidance += 0.12
+                    reward_avoidance += 0.20
 
             elif action_char == "S":
                 reward_avoidance -= STOP_DANGER_PENALTY_GAIN * (left_danger + center_danger + right_danger)
