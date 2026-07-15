@@ -1272,13 +1272,12 @@ class RealRobotDQNEnv(gym.Env):
             avoidance_active = False
 
         else:
-            # The same normal sensor conditions start avoidance in both codes.
             if base_avoidance_active:
-                self.avoidance_timer = 5
+                self.avoidance_timer = 0
                 self.avoidance_maneuver_active = True
                 self.avoidance_clear_forward_count = 0
 
-            if self.avoidance_timer > 0:
+            elif self.avoidance_timer > 0:
                 self.avoidance_timer -= 1
 
             path_clear_for_forward = (
@@ -1289,15 +1288,12 @@ class RealRobotDQNEnv(gym.Env):
                     and info["right_danger"] < 0.35
             )
 
-            if self.avoidance_maneuver_active:
-                # Keep avoidance active through the complete turn -> F -> F maneuver.
-                avoidance_active = True
+            avoidance_active = self.avoidance_maneuver_active
 
+            if self.avoidance_maneuver_active:
                 if action_char == "F" and path_clear_for_forward:
                     self.avoidance_clear_forward_count += 1
 
-                    # The current second F still receives avoidance reward.
-                    # Avoidance becomes inactive on the following action.
                     if (
                             self.avoidance_clear_forward_count
                             >= AVOIDANCE_CLEAR_FORWARD_STEPS
@@ -1305,14 +1301,8 @@ class RealRobotDQNEnv(gym.Env):
                         self.avoidance_maneuver_active = False
                         self.avoidance_clear_forward_count = 0
 
-                else:
-                    # The clear Forward actions must be consecutive.
+                elif action_char == "F":
                     self.avoidance_clear_forward_count = 0
-
-            else:
-                # Preserve the old timer as short sensor memory when no full
-                # maneuver is currently latched.
-                avoidance_active = self.avoidance_timer > 0
 
         left_danger = info["left_danger"]
         center_danger = info["center_danger"]
