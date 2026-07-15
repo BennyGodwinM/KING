@@ -5,8 +5,8 @@ from stable_baselines3 import DQN
 
 from King_V14 import RealRobotDQNEnv
 
-MODEL_PATH = "dqn_target_nav_model_16.zip"
-OUTPUT_FILE = "q_values_log_16.csv"
+MODEL_PATH = "dqn_target_nav_model_15.zip"
+OUTPUT_FILE = "q_values_log_15.csv"
 
 
 def safe_info(info, key, default=""):
