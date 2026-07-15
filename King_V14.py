@@ -1323,7 +1323,7 @@ class RealRobotDQNEnv(gym.Env):
                     (self.prev_action_char == "L" and action_char == "R") or
                     (self.prev_action_char == "R" and action_char == "L")
             ):
-                reward_avoidance -= 0.10
+                reward_avoidance -= 0.25
 
             if action_char == "L":
                 reward_avoidance += 0.10 * (right_danger - left_danger)
