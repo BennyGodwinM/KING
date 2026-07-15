@@ -1343,7 +1343,15 @@ class RealRobotDQNEnv(gym.Env):
                 )
 
                 if path_clear_for_reward:
-                    reward_avoidance += 0.12
+                    if self.avoidance_clear_forward_count == 1:
+                        # First clear F after turning:
+                        # reward completing the avoidance turn.
+                        reward_avoidance += 0.30
+                    else:
+                        # Second clear F:
+                        # reward continuing through the cleared path.
+                        reward_avoidance += 0.12
+
                 else:
                     reward_avoidance -= 0.50
                     reward_avoidance -= 0.60 * center_danger
