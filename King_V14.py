@@ -74,7 +74,7 @@ DISTANCE_DELTA_GAIN = 8.0
 ANGLE_DELTA_GAIN = 0.015
 TIME_PENALTY_GAIN = 0.35
 
-CENTERED_FORWARD_ANGLE_DEG = 7.0
+CENTERED_FORWARD_ANGLE_DEG = 12.0
 FORWARD_CLEAR_BONUS = 0.15
 PATH_CLEAR_CENTER_DANGER_THRESH = 0.40
 
@@ -1362,6 +1362,16 @@ class RealRobotDQNEnv(gym.Env):
         else:
             reward_avoidance = 0.0
 
+        # FAR-DISTANCE TARGET CENTERING REWARD
+        # Only active when avoidance is OFF.
+        if (
+                not avoidance_active
+                and action_char == "F"
+                and abs(curr_theta_est_deg) <= CENTERED_FORWARD_ANGLE_DEG
+                and curr_R_est > TARGET_REACHED_DIST_M
+        ):
+            reward_forward += 0.03
+
         # TIME PENALTY ONLY:
         reward_time = -TIME_PENALTY_GAIN * dt
 
@@ -1711,8 +1721,8 @@ def train_model():
             gradient_steps=1,
             target_update_interval=500,
             exploration_fraction=0.7,
-            exploration_initial_eps=0.80,
-            exploration_final_eps=0.2,
+            exploration_initial_eps=0.60,
+            exploration_final_eps=0.03,
             tensorboard_log="./dqn_tensorboard/"
         )
 
