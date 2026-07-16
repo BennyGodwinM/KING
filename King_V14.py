@@ -51,7 +51,7 @@ UNKNOWN_FRAMES_NEEDED = 4
 
 MAX_OBS_DISTANCE = 10.0
 IGNORE_INVALIDS_NEAR_TARGET_DIST = 0.6
-DISABLE_AVOIDANCE_NEAR_TARGET_DIST = 0.6
+DISABLE_AVOIDANCE_NEAR_TARGET_DIST = 0.7
 
 TARGET_DEPTH_MATCH_THRESH = 0.25
 TARGET_CENTER_MATCH_DEG = 18.0
@@ -74,7 +74,7 @@ DISTANCE_DELTA_GAIN = 8.0
 ANGLE_DELTA_GAIN = 0.015
 TIME_PENALTY_GAIN = 0.35
 
-CENTERED_FORWARD_ANGLE_DEG = 12.0
+CENTERED_FORWARD_ANGLE_DEG = 15.0
 FORWARD_CLEAR_BONUS = 0.15
 PATH_CLEAR_CENTER_DANGER_THRESH = 0.40
 
@@ -1362,19 +1362,19 @@ class RealRobotDQNEnv(gym.Env):
         else:
             reward_avoidance = 0.0
 
-        # FAR-DISTANCE ANGLE IMPROVEMENT REWARD
+        # ANGLE IMPROVEMENT REWARD
         # Only active when avoidance is OFF.
         if (
                 not avoidance_active
                 and self.prev_theta_est_deg is not None
                 and action_char in ("L", "R")
         ):
-            prev_abs = abs(self.prev_theta_est_deg)
-            curr_abs = abs(curr_theta_est_deg)
+            prev_angle = (self.prev_theta_est_deg + 180.0) % 360.0 - 180.0
+            curr_angle = (curr_theta_est_deg + 180.0) % 360.0 - 180.0
 
-            angle_improvement = prev_abs - curr_abs
+            angle_improvement = abs(prev_angle) - abs(curr_angle)
 
-            reward_angle += 0.002 * np.clip(angle_improvement, -5.0, 5.0)
+            reward_angle += 0.002 * np.clip(angle_improvement, 0.0, 5.0)
 
         # FAR-DISTANCE TARGET CENTERING REWARD
         # Only active when avoidance is OFF.
@@ -1394,6 +1394,8 @@ class RealRobotDQNEnv(gym.Env):
             + reward_collision
             + reward_avoidance
             + reward_time
+            + reward_forward
+            + reward_angle
         )
 
         self.episode_reward += reward
@@ -1743,7 +1745,7 @@ def train_model():
     try:
         print("Manual stop enabled: type q then press ENTER in PuTTY to end the current episode.")
         model.learn(
-            total_timesteps=1000,
+            total_timesteps=3000,
             reset_num_timesteps=False
         )
         model.save(MODEL_PATH)
