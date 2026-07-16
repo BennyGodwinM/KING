@@ -1362,6 +1362,20 @@ class RealRobotDQNEnv(gym.Env):
         else:
             reward_avoidance = 0.0
 
+        # FAR-DISTANCE ANGLE IMPROVEMENT REWARD
+        # Only active when avoidance is OFF.
+        if (
+                not avoidance_active
+                and self.prev_theta_est_deg is not None
+                and action_char in ("L", "R")
+        ):
+            prev_abs = abs(self.prev_theta_est_deg)
+            curr_abs = abs(curr_theta_est_deg)
+
+            angle_improvement = prev_abs - curr_abs
+
+            reward_angle += 0.002 * np.clip(angle_improvement, -5.0, 5.0)
+
         # FAR-DISTANCE TARGET CENTERING REWARD
         # Only active when avoidance is OFF.
         if (
