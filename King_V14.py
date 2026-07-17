@@ -1381,7 +1381,12 @@ class RealRobotDQNEnv(gym.Env):
                     (prev_angle < 0.0 and action_char == "L")
             )
 
-            if abs(prev_angle) > 2.0:
+            angle_direction_valid = (
+                    abs(prev_angle) > 2.0
+                    and abs(prev_angle) < 175.0
+            )
+
+            if angle_direction_valid:
                 if correct_turn:
                     reward_angle += 0.002 * np.clip(
                         angle_improvement,
