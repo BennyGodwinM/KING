@@ -1364,6 +1364,7 @@ class RealRobotDQNEnv(gym.Env):
 
         # ANGLE IMPROVEMENT REWARD
         # Only active when avoidance is OFF.
+        # Reward only when the chosen turn matches the target direction.
         if (
                 not avoidance_active
                 and self.prev_theta_est_deg is not None
@@ -1374,7 +1375,18 @@ class RealRobotDQNEnv(gym.Env):
 
             angle_improvement = abs(prev_angle) - abs(curr_angle)
 
-            reward_angle += 0.002 * np.clip(angle_improvement, 0.0, 5.0)
+            correct_turn = (
+                    (prev_angle > 0.0 and action_char == "R")
+                    or
+                    (prev_angle < 0.0 and action_char == "L")
+            )
+
+            if correct_turn:
+                reward_angle += 0.002 * np.clip(
+                    angle_improvement,
+                    0.0,
+                    5.0
+                )
 
         # FAR-DISTANCE TARGET CENTERING REWARD
         # Only active when avoidance is OFF.
