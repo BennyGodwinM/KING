@@ -2045,7 +2045,7 @@ if __name__ == "__main__":
     prompt_run_metadata()
     ensure_log_file()
 
-    MODE = "repair"   # "train", "repair", or "run"
+    MODE = "run"   # "train", "repair", or "run"
 
     if MODE == "train":
         train_model()
